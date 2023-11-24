@@ -1,0 +1,103 @@
+// Bibliotecas necessárias
+#include <WiFi.h>
+#include "DHTesp.h"
+#include "ThingSpeak.h"
+
+// Definições de pinos e constantes
+const int DHT_PIN = 15; // Pino conectado ao sensor DHT22
+const int GREEN_PIN = 12; // Pino para LED verde
+const int RED_PIN = 13; // Pino para LED vermelho
+const char* WIFI_NAME = "Wokwi-GUEST"; // Nome da rede Wi-Fi
+const char* WIFI_PASSWORD = ""; // Senha da rede Wi-Fi
+const int myChannelNumber = 2347705; // Número do canal ThingSpeak
+const char* myApiKey = "SGFL6TWXNB6KV1ZE"; // Chave do canal ThingSpeak
+const char* server = "api.thingspeak.com"; // Servidor ThingSpeak
+
+// Inicializa o sensor DHT e o cliente Wi-Fi
+DHTesp dhtSensor;
+WiFiClient client;
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000); // Aguarde um momento para a inicialização do monitor serial
+  Serial.println("Iniciando o sistema...");
+  
+  WiFi.begin(WIFI_NAME, WIFI_PASSWORD);
+  
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+  }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWifi conectado !");
+    Serial.println("Local IP: " + WiFi.localIP().toString());
+  } else {
+    Serial.println("\nFalha ao conectar-se ao Wifi!");
+  }
+  
+  dhtSensor.setup(DHT_PIN, DHTesp::DHT22);
+  pinMode(RED_PIN, OUTPUT);
+  pinMode(GREEN_PIN, OUTPUT);
+  ThingSpeak.begin(client);
+}
+
+
+void loop() {
+  // Obtém temperatura e umidade do sensor DHT
+  TempAndHumidity data = dhtSensor.getTempAndHumidity();
+  
+  // Define os campos do ThingSpeak com os valores lidos
+  ThingSpeak.setField(1, data.temperature);
+  ThingSpeak.setField(2, data.humidity);
+  
+  // Verifica se a temperatura está fora do intervalo normal
+  if (data.temperature > 37 && data.humidity < 40) {
+    Serial.println("Alerta: Paciente com febre alta e umidade baixa!");
+    digitalWrite(RED_PIN, HIGH);
+    digitalWrite(GREEN_PIN, LOW);
+  } else if (data.temperature > 37 && data.humidity >= 40) {
+    Serial.println("Alerta: Paciente com febre alta, mas umidade adequada.");
+    digitalWrite(RED_PIN, HIGH);
+    digitalWrite(GREEN_PIN, LOW);
+  }else if (data.temperature > 40 && data.humidity >= 50) {
+    Serial.println("Alerta: Paciente com febre alta e humidade alta.");
+    digitalWrite(RED_PIN, HIGH);
+    digitalWrite(GREEN_PIN, LOW);
+  }else if (data.temperature < 35 && data.humidity < 40) {
+    Serial.println("Alerta: Paciente com hipotermia e umidade baixa!");
+    digitalWrite(RED_PIN, HIGH);
+    digitalWrite(GREEN_PIN, LOW);
+  } else if (data.temperature < 35 && data.humidity >= 40) {
+    Serial.println("Alerta: Paciente com hipotermia, mas umidade adequada.");
+    digitalWrite(RED_PIN, HIGH);
+    digitalWrite(GREEN_PIN, LOW);
+  }else if (data.temperature > 40 && data.humidity >= 50) {
+    Serial.println("Alerta: Paciente com hiportemia e humidade alta.");
+    digitalWrite(RED_PIN, HIGH);
+    digitalWrite(GREEN_PIN, LOW);
+  }else {
+    Serial.println("Paciente estável");
+    digitalWrite(RED_PIN, LOW);
+    digitalWrite(GREEN_PIN, HIGH);
+  }
+  
+  // Envia os dados para o ThingSpeak
+  int x = ThingSpeak.writeFields(myChannelNumber, myApiKey);
+  
+  // Exibe os valores lidos e o status do envio
+  Serial.println("Temperatura: " + String(data.temperature, 2) + "°C");
+  Serial.println("Umidade da sala: " + String(data.humidity, 1) + "%");
+  
+  // Verifica se o envio foi bem-sucedido
+  if (x == 200) {
+    Serial.println("Dados enviados com sucesso");
+  } else {
+    Serial.println("Erro no envio: " + String(x));
+  }
+  Serial.println("---");
+
+  delay(10000); // Aguarda 10 segundos antes da próxima leitura/envio
+}
